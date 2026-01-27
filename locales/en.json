@@ -1,0 +1,46 @@
+{
+    "notify": {
+        "missing_tool": "You need a %s for this!",
+        "inventory_full": "Your inventory is full!",
+        "on_cooldown": "Wait %d seconds before attempting another theft",
+        "location_cooldown": "This location needs time to recover (%ds remaining)",
+        "theft_success": "You successfully stripped the copper!",
+        "theft_cancelled": "Cancelled!",
+        "theft_failed": "You fumbled and made too much noise!",
+        "spotted": "Someone may have spotted you!",
+        "tool_broke": "Your %s broke!",
+        "received_items": "Received: %s",
+        "nothing_found": "You didn't find anything valuable this time.",
+        "sold_items": "Sold %dx items for $%d",
+        "sold_dirty": "Sold %dx items for $%d in marked bills",
+        "sold_all": "Sold %s for $%d",
+        "nothing_to_sell": "You have nothing to sell!",
+        "not_enough_items": "You don't have enough items!",
+        "cannot_sell": "This item cannot be sold here!",
+        "already_busy": "You are already busy!"
+    },
+    "menu": {
+        "scrapyard_title": "Scrap Yard",
+        "sell_all": "Sell All Copper",
+        "sell_all_desc": "Sell all your copper materials at once",
+        "quantity": "Quantity",
+        "price_range": "Price Range"
+    },
+    "target": {
+        "strip_electrical": "Strip copper wiring from junction box",
+        "strip_plumbing": "Cut exposed copper pipes",
+        "strip_hvac": "Strip HVAC coils and wiring",
+        "strip_infrastructure": "Strip signal wiring",
+        "strip_building": "Strip internal wiring",
+        "strip_vehicle": "Strip vehicle copper components",
+        "sell_copper": "Sell Copper Materials"
+    },
+    "progress": {
+        "electrical": "Stripping electrical wiring...",
+        "plumbing": "Cutting copper pipes...",
+        "hvac": "Stripping HVAC unit...",
+        "infrastructure": "Stripping infrastructure...",
+        "building": "Stripping building materials...",
+        "vehicle": "Stripping vehicle parts..."
+    }
+}
