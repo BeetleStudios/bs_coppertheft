@@ -1,5 +1,4 @@
 # bs_coppertheft
-# NS Copper Theft Script
 
 A copper theft script for FiveM servers running the Qbox Framework. 
 Players can steal copper from various props throughout the map using tools and sell their haul at scrap yards.
