@@ -8,6 +8,43 @@ local function DebugPrint(...)
     end
 end
 
+-- Build allowed model+type set from config (server-side source of truth)
+local AllowedTheftLocations = {}
+local function BuildAllowedLocations()
+    AllowedTheftLocations = {}
+    for _, loc in ipairs(Config.Locations or {}) do
+        if loc.model and loc.type then
+            local key = tostring(loc.model) .. '_' .. tostring(loc.type)
+            AllowedTheftLocations[key] = true
+            if not AllowedTheftLocations[loc.model] then
+                AllowedTheftLocations[loc.model] = {}
+            end
+            AllowedTheftLocations[loc.model][loc.type] = true
+        end
+    end
+end
+BuildAllowedLocations()
+
+-- Server-side cooldowns (location key = rounded coords + model, so same physical spot syncs for all players)
+local PlayerGlobalLastTheft = {}
+local PlayerLootCount = {} -- loots since last global cooldown (global cooldown only after lootsBeforeCooldown)
+local LocationLastTheft = {}
+local function GetLocationKey(propCoords, modelHash)
+    if type(propCoords) ~= 'table' or not propCoords.x or not propCoords.y or not propCoords.z then
+        return nil
+    end
+    local x = math.floor(tonumber(propCoords.x) or 0)
+    local y = math.floor(tonumber(propCoords.y) or 0)
+    local z = math.floor(tonumber(propCoords.z) or 0)
+    return string.format('%d_%d_%d_%s', x, y, z, tostring(modelHash))
+end
+
+local function IsLocationAllowed(modelHash, theftType)
+    if type(modelHash) ~= 'number' or type(theftType) ~= 'string' then return false end
+    local types = AllowedTheftLocations[modelHash]
+    return types and types[theftType] == true
+end
+
 -- Calculate loot based on type
 local function CalculateLoot(theftType)
     local lootTable = Config.Loot[theftType]
@@ -60,12 +97,67 @@ local function RemoveToolDurability(source, theftType)
     end
 end
 
--- Process theft event (prop-based)
-RegisterNetEvent('bs__coppertheft:server:processTheft', function(propNetId, theftType)
+-- Process theft event (prop-based) — server validates coords, model/type, distance, and cooldowns
+RegisterNetEvent('bs__coppertheft:server:processTheft', function(propCoords, modelHash, theftType)
     local source = source
     local Player = QBX:GetPlayer(source)
-    
     if not Player then return end
+
+    -- 1) Validate payload types
+    if type(propCoords) ~= 'table' or type(modelHash) ~= 'number' or type(theftType) ~= 'string' then
+        DebugPrint('processTheft rejected: invalid payload from', source)
+        return
+    end
+    local px = tonumber(propCoords.x)
+    local py = tonumber(propCoords.y)
+    local pz = tonumber(propCoords.z)
+    if not px or not py or not pz then
+        DebugPrint('processTheft rejected: invalid prop coords from', source)
+        return
+    end
+
+    -- 2) Entity must be a valid theft target from config (no arbitrary type/model)
+    if not IsLocationAllowed(modelHash, theftType) then
+        DebugPrint('processTheft rejected: model/type not in config', modelHash, theftType, 'from', source)
+        return
+    end
+
+    -- 3) Distance check: player must be near the claimed prop (no triggering from a field)
+    local ped = GetPlayerPed(source)
+    if not ped or not DoesEntityExist(ped) then return end
+    local playerCoords = GetEntityCoords(ped)
+    local dx = playerCoords.x - px
+    local dy = playerCoords.y - py
+    local dz = playerCoords.z - pz
+    local distSq = dx * dx + dy * dy + dz * dz
+    local maxDist = tonumber(Config.MaxTheftDistance) or 5.0
+    if distSq > (maxDist * maxDist) then
+        DebugPrint('processTheft rejected: player too far from prop', math.sqrt(distSq), 'from', source)
+        return
+    end
+
+    -- 4) Server-side cooldowns (location key = rounded coords + model, same for all players)
+    local now = os.time()
+    local cooldownCfg = Config.Cooldowns or {}
+    local locationKey = GetLocationKey(propCoords, modelHash)
+    if not locationKey then return end
+
+    if cooldownCfg.enabled then
+        if cooldownCfg.global and cooldownCfg.global > 0 then
+            local last = PlayerGlobalLastTheft[source]
+            if last and (now - last) < cooldownCfg.global then
+                TriggerClientEvent('bs__coppertheft:client:notify', source, 'You need to wait before stealing again.', 'error')
+                return
+            end
+        end
+        if cooldownCfg.perLocation and cooldownCfg.perLocation > 0 then
+            local last = LocationLastTheft[locationKey]
+            if last and (now - last) < cooldownCfg.perLocation then
+                TriggerClientEvent('bs__coppertheft:client:notify', source, 'This spot has already been stripped recently.', 'error')
+                return
+            end
+        end
+    end
 
     -- Verify player has required tools
     local requiredTools = Config.RequiredTools[theftType]
@@ -104,7 +196,22 @@ RegisterNetEvent('bs__coppertheft:server:processTheft', function(propNetId, thef
     -- Remove tool durability
     RemoveToolDurability(source, theftType)
 
-    DebugPrint('Player', GetPlayerName(source), 'completed theft at prop', propNetId, 'type:', theftType)
+    -- Update server cooldowns (global only after lootsBeforeCooldown, so client and server agree)
+    if cooldownCfg.enabled then
+        local lootsBefore = tonumber(cooldownCfg.lootsBeforeCooldown) or 0
+        if cooldownCfg.global and cooldownCfg.global > 0 then
+            PlayerLootCount[source] = (PlayerLootCount[source] or 0) + 1
+            if lootsBefore == 0 or PlayerLootCount[source] >= lootsBefore then
+                PlayerGlobalLastTheft[source] = now
+                PlayerLootCount[source] = 0
+            end
+        end
+        if cooldownCfg.perLocation and cooldownCfg.perLocation > 0 then
+            LocationLastTheft[locationKey] = now
+        end
+    end
+
+    DebugPrint('Player', GetPlayerName(source), 'completed theft at', locationKey, 'type:', theftType)
 end)
 
 -- Alert police event
@@ -279,8 +386,9 @@ lib.addCommand('givecopper', {
     TriggerClientEvent('bs__coppertheft:client:notify', source, 'Received copper items!', 'success')
 end)
 
--- Resource started message
+-- Resource started: rebuild allowed locations from config
 AddEventHandler('onResourceStart', function(resourceName)
     if GetCurrentResourceName() ~= resourceName then return end
+    BuildAllowedLocations()
     print('^2[bs__coppertheft]^7 Copper Theft script loaded successfully!')
 end)

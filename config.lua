@@ -173,6 +173,10 @@ Config.Blips = {
 -- Target Settings
 Config.TargetDistance = 2.0 -- Distance to interact with targets
 
+-- Server-side validation (anti-cheat)
+-- Max distance from player to claimed prop coords - prevents triggering rewards from across the map
+Config.MaxTheftDistance = 5.0
+
 -- Theft Locations (Prop-Based)
 -- Types: electrical, plumbing, hvac, infrastructure, building, vehicle
 -- Now uses prop models instead of coordinates

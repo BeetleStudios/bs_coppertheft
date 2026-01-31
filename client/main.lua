@@ -626,9 +626,9 @@ local function PerformTheft(propEntity, location)
     if progressSuccess then
         success = true
         
-        -- Request loot from server (pass prop entity net ID for tracking)
-        local propNetId = NetworkGetNetworkIdFromEntity(propEntity)
-        TriggerServerEvent('bs__coppertheft:server:processTheft', propNetId, location.type)
+        -- Send prop coords + model + type for server validation (distance, config, cooldowns)
+        local coords = GetEntityCoords(propEntity)
+        TriggerServerEvent('bs__coppertheft:server:processTheft', { x = coords.x, y = coords.y, z = coords.z }, location.model, location.type)
         
         -- Increment loot counter
         local lootsBeforeCooldown = Config.Cooldowns.lootsBeforeCooldown or 0
